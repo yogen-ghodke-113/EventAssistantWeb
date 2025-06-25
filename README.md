@@ -127,3 +127,4 @@ Feel free to submit issues and enhancement requests!
 ## License
 
 This project is for educational and demo purposes.
+# Updated for Google Gen AI SDK compatibility
