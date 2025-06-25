@@ -412,9 +412,9 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             system_instruction="Provide direct, concise responses without internal reasoning steps."
         )
 
-        # Make the request
+        # Make the request with faster Flash-Lite model
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite-preview-06-17",
             contents=prompt,
             config=config,
         )
@@ -570,9 +570,9 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
             # Enable thinking for better news verification (no system instruction)
         )
 
-        # Make the request with 2.5 Pro model for better news verification
+        # Make the request with faster Flash-Lite model
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-pro",  # Use Pro model with thinking for news
+            model="gemini-2.5-flash-lite-preview-06-17",  # Use faster model for news
             contents=prompt,
             config=config,
         )
@@ -906,32 +906,61 @@ def details_page():
         description_text = investor_row["Description"]
         st.markdown(f'<div style="background: #e8f5e8; padding: 16px; border-radius: 8px; border-left: 4px solid #4caf50; font-size: 16px; line-height: 1.5;">{description_text}</div>', unsafe_allow_html=True)
     
-    # Auto-load AI Company Information
+    # Auto-load AI Company Information and News in Parallel
     st.markdown("---")
     company_cache_key = f"{investor_row['Investors']}_full_info"
+    news_cache_key = f"{investor_row['Investors']}_news_pro"
     
-    if company_cache_key not in st.session_state.ai_cache:
-        with st.spinner("Loading AI insights..."):
-            company_info = generate_company_info(investor_row['Investors'])
-            if company_info:
-                st.markdown(company_info)
+    # Check what needs to be loaded
+    need_company_info = company_cache_key not in st.session_state.ai_cache
+    need_news = news_cache_key not in st.session_state.ai_cache
+    
+    # Load both in parallel if needed
+    if need_company_info or need_news:
+        # Show loading for what's needed
+        loading_text = []
+        if need_company_info: loading_text.append("company insights")
+        if need_news: loading_text.append("recent news")
+        
+        with st.spinner(f"Loading {' and '.join(loading_text)}..."):
+            import concurrent.futures
+            
+            def load_company_info():
+                if need_company_info:
+                    return generate_company_info(investor_row['Investors'])
+                return st.session_state.ai_cache[company_cache_key]
+            
+            def load_news():
+                if need_news:
+                    return generate_news_articles(investor_row['Investors'])
+                return st.session_state.ai_cache[news_cache_key]
+            
+            # Execute both functions in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                company_future = executor.submit(load_company_info)
+                news_future = executor.submit(load_news)
+                
+                # Get results
+                company_info = company_future.result()
+                news_content = news_future.result()
+                
+                # Cache results if they were newly generated
+                if need_company_info and company_info:
+                    st.session_state.ai_cache[company_cache_key] = company_info
+                if need_news and news_content:
+                    st.session_state.ai_cache[news_cache_key] = news_content
     else:
-        st.markdown(st.session_state.ai_cache[company_cache_key])
+        # Both are cached
+        company_info = st.session_state.ai_cache[company_cache_key]
+        news_content = st.session_state.ai_cache[news_cache_key]
     
-    # Recent News Section - Auto-load
+    # Display company information
+    if company_info:
+        st.markdown(company_info)
+    
+    # Recent News Section
     st.markdown("---")
     st.markdown("## 📰 Recent News")
-    
-    # Auto-load news when page loads
-    news_cache_key = f"{investor_row['Investors']}_news"
-    
-    if news_cache_key not in st.session_state.ai_cache:
-        with st.spinner("Loading recent news..."):
-            news_content = generate_news_articles(investor_row['Investors'])
-            # Cache the result
-            st.session_state.ai_cache[news_cache_key] = news_content
-    else:
-        news_content = st.session_state.ai_cache[news_cache_key]
     
     # Display news content
     if news_content and news_content != "No recent verified news articles found.":
@@ -1023,6 +1052,18 @@ def details_page():
 
 def main():
     """Main application function with two-page structure"""
+    # Initialize session state
+    if 'ai_cache' not in st.session_state:
+        st.session_state.ai_cache = {}
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "search"
+    if 'selected_investor' not in st.session_state:
+        st.session_state.selected_investor = None
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    if 'current_company' not in st.session_state:
+        st.session_state.current_company = ""
+    
     # Setup
     api_success, client = setup_gemini_api()
     if not api_success:
