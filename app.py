@@ -388,6 +388,10 @@ def add_wikipedia_style_citations(response):
 
 def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini API with Google Search grounding and caching"""
+    # Initialize ai_cache if it doesn't exist
+    if 'ai_cache' not in st.session_state:
+        st.session_state.ai_cache = {}
+        
     if cache_key and cache_key in st.session_state.ai_cache:
         logger.info(f"Cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
@@ -546,6 +550,10 @@ def get_link_preview(url: str) -> Dict[str, str]:
 
 def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini 2.5 Pro with thinking enabled for news generation"""
+    # Initialize ai_cache if it doesn't exist
+    if 'ai_cache' not in st.session_state:
+        st.session_state.ai_cache = {}
+        
     if cache_key and cache_key in st.session_state.ai_cache:
         logger.info(f"News cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
@@ -836,6 +844,14 @@ def search_page():
 
 def details_page():
     """Display the details page with auto-loading insights"""
+    # Initialize session state variables if they don't exist
+    if 'ai_cache' not in st.session_state:
+        st.session_state.ai_cache = {}
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    if 'current_company' not in st.session_state:
+        st.session_state.current_company = ""
+        
     investor_row = st.session_state.selected_investor
     
     if investor_row is None:
