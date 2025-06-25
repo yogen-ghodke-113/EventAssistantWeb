@@ -12,6 +12,9 @@ import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import logging
+import threading
+import concurrent.futures
+import time
 # Removed voice input dependencies - keeping it text-only
 
 # Configure logging
@@ -388,10 +391,6 @@ def add_wikipedia_style_citations(response):
 
 def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini API with Google Search grounding and caching"""
-    # Initialize ai_cache if it doesn't exist
-    if 'ai_cache' not in st.session_state:
-        st.session_state.ai_cache = {}
-        
     if cache_key and cache_key in st.session_state.ai_cache:
         logger.info(f"Cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
@@ -416,9 +415,9 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             system_instruction="Provide direct, concise responses without internal reasoning steps."
         )
 
-        # Make the request with Gemini 2.5 Flash (correct model name)
+        # Make the request with ultra-fast model
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-flash-002",
+            model="gemini-2.5-flash-lite-preview-06-17",  # Use fastest model for company info
             contents=prompt,
             config=config,
         )
@@ -550,10 +549,6 @@ def get_link_preview(url: str) -> Dict[str, str]:
 
 def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini 2.5 Pro with thinking enabled for news generation"""
-    # Initialize ai_cache if it doesn't exist
-    if 'ai_cache' not in st.session_state:
-        st.session_state.ai_cache = {}
-        
     if cache_key and cache_key in st.session_state.ai_cache:
         logger.info(f"News cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
@@ -575,12 +570,12 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         config = types.GenerateContentConfig(
             tools=[grounding_tool],
             response_modalities=["TEXT"],
-            # Enable thinking for better news verification (no system instruction to allow thinking)
+            # Enable thinking for better news verification (no system instruction)
         )
 
-        # Make the request with Gemini 2.5 Pro for better news verification
+        # Make the request with 2.5 Flash Lite for faster news generation
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-pro-002",  # Use Pro model with thinking for news
+            model="gemini-2.5-flash-lite-preview-06-17",  # Use ultra-fast model for news
             contents=prompt,
             config=config,
         )
@@ -602,9 +597,43 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         st.error(f"Error getting news response: {str(e)}")
         return None
 
+def load_content_parallel(company_name: str) -> Dict[str, str]:
+    """Load company info and news in parallel for faster performance"""
+    results = {"company_info": None, "news": None}
+    
+    def load_company_info():
+        try:
+            start_time = time.time()
+            logger.info(f"Starting company info generation for {company_name}")
+            results["company_info"] = generate_company_info(company_name)
+            logger.info(f"Company info completed in {time.time() - start_time:.2f}s")
+        except Exception as e:
+            logger.error(f"Error loading company info: {e}")
+            results["company_info"] = "Error loading company information."
+    
+    def load_news():
+        try:
+            start_time = time.time()
+            logger.info(f"Starting news generation for {company_name}")
+            results["news"] = generate_news_articles(company_name)
+            logger.info(f"News generation completed in {time.time() - start_time:.2f}s")
+        except Exception as e:
+            logger.error(f"Error loading news: {e}")
+            results["news"] = "Error loading news articles."
+    
+    # Use ThreadPoolExecutor for parallel execution
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        company_future = executor.submit(load_company_info)
+        news_future = executor.submit(load_news)
+        
+        # Wait for both to complete
+        concurrent.futures.wait([company_future, news_future], timeout=30)
+    
+    return results
+
 def generate_news_articles(company_name: str) -> str:
-    """Generate news articles using Gemini 2.5 Pro with strict verification"""
-    prompt = f"""I need you to find REAL, VERIFIABLE news articles about "{company_name}" from the last 6 months.
+    """Generate news articles using Gemini 2.5 Flash Lite for speed"""
+    prompt = f"""Find REAL, VERIFIABLE news articles about "{company_name}" from the last 6 months.
 
 **CRITICAL REQUIREMENT: NO HALLUCINATION**
 - Every URL must be real and working
@@ -621,7 +650,7 @@ Find recent news articles about "{company_name}" (the investment firm/private eq
 5. Portfolio company activities
 
 **OUTPUT REQUIREMENTS:**
-- Maximum 5 articles
+- Maximum 3 articles (for speed)
 - Only include articles you can verify exist
 - Use clean markdown formatting
 - No bracketed numbers [1], [2], etc. in headlines or URLs
@@ -640,7 +669,7 @@ Think through each article you want to include. Can you verify this is a real ar
 
 Please research and provide real news about {company_name}."""
     
-    cache_key = f"{company_name}_news_pro"
+    cache_key = f"{company_name}_news"
     response = get_gemini_news_response(prompt, cache_key)
     
     return response or "No recent verified news articles found."
@@ -844,14 +873,6 @@ def search_page():
 
 def details_page():
     """Display the details page with auto-loading insights"""
-    # Initialize session state variables if they don't exist
-    if 'ai_cache' not in st.session_state:
-        st.session_state.ai_cache = {}
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
-    if 'current_company' not in st.session_state:
-        st.session_state.current_company = ""
-        
     investor_row = st.session_state.selected_investor
     
     if investor_row is None:
@@ -922,55 +943,48 @@ def details_page():
         description_text = investor_row["Description"]
         st.markdown(f'<div style="background: #e8f5e8; padding: 16px; border-radius: 8px; border-left: 4px solid #4caf50; font-size: 16px; line-height: 1.5;">{description_text}</div>', unsafe_allow_html=True)
     
-    # Auto-load AI Company Information and News in Parallel
+    # Parallel loading of AI content and news
     st.markdown("---")
     company_cache_key = f"{investor_row['Investors']}_full_info"
-    news_cache_key = f"{investor_row['Investors']}_news_pro"
+    news_cache_key = f"{investor_row['Investors']}_news"
     
-    # Check what needs to be loaded
-    need_company_info = company_cache_key not in st.session_state.ai_cache
-    need_news = news_cache_key not in st.session_state.ai_cache
+    # Check if both are cached
+    company_cached = company_cache_key in st.session_state.ai_cache
+    news_cached = news_cache_key in st.session_state.ai_cache
     
-    # Load both in parallel if needed
-    if need_company_info or need_news:
-        # Show loading for what's needed
-        loading_text = []
-        if need_company_info: loading_text.append("company insights")
-        if need_news: loading_text.append("recent news")
+    if not company_cached or not news_cached:
+        # Show loading message
+        if not company_cached and not news_cached:
+            loading_msg = st.empty()
+            loading_msg.info("🚀 Loading AI insights and recent news in parallel...")
+        elif not company_cached:
+            loading_msg = st.empty()
+            loading_msg.info("🚀 Loading AI insights...")
+        else:
+            loading_msg = st.empty()
+            loading_msg.info("🚀 Loading recent news...")
         
-        with st.spinner(f"Loading {' and '.join(loading_text)}..."):
-            import concurrent.futures
+        # Load content in parallel if not cached
+        try:
+            start_time = time.time()
+            results = load_content_parallel(investor_row['Investors'])
+            load_time = time.time() - start_time
             
-            def load_company_info():
-                if need_company_info:
-                    return generate_company_info(investor_row['Investors'])
-                return st.session_state.ai_cache[company_cache_key]
+            # Cache results
+            if results["company_info"] and not company_cached:
+                st.session_state.ai_cache[company_cache_key] = results["company_info"]
+            if results["news"] and not news_cached:
+                st.session_state.ai_cache[news_cache_key] = results["news"]
             
-            def load_news():
-                if need_news:
-                    return generate_news_articles(investor_row['Investors'])
-                return st.session_state.ai_cache[news_cache_key]
-            
-            # Execute both functions in parallel
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                company_future = executor.submit(load_company_info)
-                news_future = executor.submit(load_news)
-                
-                # Get results
-                company_info = company_future.result()
-                news_content = news_future.result()
-                
-                # Cache results if they were newly generated
-                if need_company_info and company_info:
-                    st.session_state.ai_cache[company_cache_key] = company_info
-                if need_news and news_content:
-                    st.session_state.ai_cache[news_cache_key] = news_content
-    else:
-        # Both are cached
-        company_info = st.session_state.ai_cache[company_cache_key]
-        news_content = st.session_state.ai_cache[news_cache_key]
+            loading_msg.success(f"✅ Content loaded in {load_time:.1f}s")
+            time.sleep(0.5)  # Brief pause to show success
+            loading_msg.empty()
+        except Exception as e:
+            loading_msg.error(f"❌ Error loading content: {str(e)}")
+            logger.error(f"Parallel loading error: {e}")
     
     # Display company information
+    company_info = st.session_state.ai_cache.get(company_cache_key, "Information not available.")
     if company_info:
         st.markdown(company_info)
     
@@ -979,17 +993,22 @@ def details_page():
     st.markdown("## 📰 Recent News")
     
     # Display news content
+    news_content = st.session_state.ai_cache.get(news_cache_key, "No recent verified news articles found.")
     if news_content and news_content != "No recent verified news articles found.":
         st.markdown(news_content)
     else:
         st.info("No recent verified news articles found for this company.")
         
-    # Refresh news button
-    if st.button("🔄 Refresh News", key="refresh_news"):
-        # Clear cache and reload
-        if news_cache_key in st.session_state.ai_cache:
-            del st.session_state.ai_cache[news_cache_key]
-        st.rerun()
+    # Refresh button
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🔄 Refresh All Content", key="refresh_all", use_container_width=True):
+            # Clear cache and reload
+            if company_cache_key in st.session_state.ai_cache:
+                del st.session_state.ai_cache[company_cache_key]
+            if news_cache_key in st.session_state.ai_cache:
+                del st.session_state.ai_cache[news_cache_key]
+            st.rerun()
     
     # AI Research Assistant Chatbot Section
     st.markdown("---")
@@ -1068,18 +1087,6 @@ def details_page():
 
 def main():
     """Main application function with two-page structure"""
-    # Initialize session state
-    if 'ai_cache' not in st.session_state:
-        st.session_state.ai_cache = {}
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = "search"
-    if 'selected_investor' not in st.session_state:
-        st.session_state.selected_investor = None
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
-    if 'current_company' not in st.session_state:
-        st.session_state.current_company = ""
-    
     # Setup
     api_success, client = setup_gemini_api()
     if not api_success:
