@@ -424,10 +424,19 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             logger.info(f"Raw response length: {len(result)}")
             
             # Fix monetary formatting issues by adding spaces around numbers and units
+            # Handle specific patterns like "1-50million" -> "1-50 million"
+            result = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', result)
+            # Handle standalone numbers with monetary units
             result = re.sub(r'(\d+)(million|billion|Million|Billion)', r'\1 \2', result)
+            # Fix dollar amounts
             result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
-            result = re.sub(r'([0-9]+)([a-zA-Z]+)([0-9]+)', r'\1 \2 \3', result)
-            result = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', result)  # Fix "50million" -> "50 million"
+            # Fix compound words like "andenterprise" -> "and enterprise"
+            result = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', result)
+            # General fix for number followed by capital letter
+            result = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', result)
             
             # Add Wikipedia-style citations to the response
             text_with_citations = add_wikipedia_style_citations(response)
