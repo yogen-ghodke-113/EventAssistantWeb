@@ -416,9 +416,9 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             system_instruction="Provide direct, concise responses without internal reasoning steps."
         )
 
-        # Make the request with faster Flash-Lite model
+        # Make the request with Gemini 2.5 Flash
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-flash-lite-preview-06-17",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=config,
         )
@@ -575,12 +575,12 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         config = types.GenerateContentConfig(
             tools=[grounding_tool],
             response_modalities=["TEXT"],
-            # Enable thinking for better news verification (no system instruction)
+            # Enable thinking for better news verification (no system instruction to allow thinking)
         )
 
-        # Make the request with faster Flash-Lite model
+        # Make the request with Gemini 2.5 Pro for better news verification
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-flash-lite-preview-06-17",  # Use faster model for news
+            model="gemini-2.5-pro",  # Use Pro model with thinking for news
             contents=prompt,
             config=config,
         )
