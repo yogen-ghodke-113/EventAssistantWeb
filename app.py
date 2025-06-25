@@ -261,22 +261,27 @@ def load_investor_data():
 def setup_gemini_api():
     """Setup Gemini API with API key from environment variables"""
     # Try to get API key from environment variables first (.env file or system env)
-    api_key = os.getenv('GEMINI_API_KEY')
+    # Support both GEMINI_API_KEY (legacy) and GOOGLE_API_KEY (new SDK standard)
+    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
     
     # Fallback to Streamlit secrets for cloud deployment
     if not api_key:
-        api_key = st.secrets.get('GEMINI_API_KEY')
+        try:
+            api_key = st.secrets.get('GOOGLE_API_KEY') or st.secrets.get('GEMINI_API_KEY')
+        except:
+            api_key = None
     
     if not api_key:
         st.error("⚠️ Gemini API key not found!")
         st.info("**Setup Options:**")
-        st.info("1. Create a `.env` file with: `GEMINI_API_KEY=your_key_here`")
-        st.info("2. Set environment variable: `export GEMINI_API_KEY=your_key_here`")
-        st.info("3. For Streamlit Cloud: Add to secrets")
+        st.info("1. Create a `.env` file with: `GOOGLE_API_KEY=your_key_here` or `GEMINI_API_KEY=your_key_here`")
+        st.info("2. Set environment variable: `export GOOGLE_API_KEY=your_key_here`")
+        st.info("3. For Streamlit Cloud: Add to secrets as 'GOOGLE_API_KEY'")
         st.info("Get your API key at: https://makersuite.google.com/app/apikey")
         return False, None
     
     try:
+        # Initialize client with new SDK structure
         client = genai.Client(api_key=api_key)
         return True, client
     except Exception as e:
@@ -400,7 +405,7 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             google_search=types.GoogleSearch()
         )
 
-        # Configure generation settings (disable thinking for faster responses)
+        # Configure generation settings (use Flash for faster responses without thinking)
         config = types.GenerateContentConfig(
             tools=[grounding_tool],
             response_modalities=["TEXT"],
@@ -549,16 +554,16 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
             google_search=types.GoogleSearch()
         )
 
-        # Configure generation settings - USE PRO model with thinking enabled
+        # Configure generation settings - USE PRO model with thinking enabled for better verification
         config = types.GenerateContentConfig(
             tools=[grounding_tool],
             response_modalities=["TEXT"],
-            # Remove system instruction to allow thinking
+            # Enable thinking for better news verification (no system instruction)
         )
 
-        # Make the request with 2.5 Pro model
+        # Make the request with 2.5 Pro model for better news verification
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-pro",  # Use Pro model
+            model="gemini-2.5-pro",  # Use Pro model with thinking for news
             contents=prompt,
             config=config,
         )

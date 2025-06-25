@@ -34,7 +34,7 @@ In the **Advanced settings** section during deployment:
 
 ```toml
 [secrets]
-GEMINI_API_KEY = "your_gemini_api_key_here"
+GOOGLE_API_KEY = "your_gemini_api_key_here"
 ```
 
 **Or after deployment:**
@@ -43,8 +43,10 @@ GEMINI_API_KEY = "your_gemini_api_key_here"
 2. Click **"Settings"** → **"Secrets"**
 3. Add:
    ```
-   GEMINI_API_KEY = "your_actual_api_key_here"
+   GOOGLE_API_KEY = "your_actual_api_key_here"
    ```
+
+**Note:** The app also supports the legacy `GEMINI_API_KEY` variable for backward compatibility.
 
 ### 📁 **Files Included in Deployment**
 
@@ -68,7 +70,7 @@ GEMINI_API_KEY = "your_gemini_api_key_here"
 1. Create `.env` file:
 
    ```
-   GEMINI_API_KEY=your_api_key_here
+   GOOGLE_API_KEY=your_api_key_here
    ```
 
 2. Install dependencies:
@@ -102,7 +104,7 @@ GEMINI_API_KEY = "your_gemini_api_key_here"
 
 **1. "API key not found" error:**
 
-- Check that `GEMINI_API_KEY` is set in Streamlit Secrets
+- Check that `GOOGLE_API_KEY` is set in Streamlit Secrets
 - Ensure no extra spaces in the key
 
 **2. "CSV file not found" error:**
