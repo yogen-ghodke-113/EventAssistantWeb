@@ -12,8 +12,6 @@ import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import logging
-import threading
-import concurrent.futures
 import time
 # Removed voice input dependencies - keeping it text-only
 
@@ -597,37 +595,29 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         st.error(f"Error getting news response: {str(e)}")
         return None
 
-def load_content_parallel(company_name: str) -> Dict[str, str]:
-    """Load company info and news in parallel for faster performance"""
+def load_content_progressive(company_name: str) -> Dict[str, str]:
+    """Load content with progressive updates - Streamlit-safe approach"""
     results = {"company_info": None, "news": None}
     
-    def load_company_info():
-        try:
-            start_time = time.time()
-            logger.info(f"Starting company info generation for {company_name}")
-            results["company_info"] = generate_company_info(company_name)
-            logger.info(f"Company info completed in {time.time() - start_time:.2f}s")
-        except Exception as e:
-            logger.error(f"Error loading company info: {e}")
-            results["company_info"] = "Error loading company information."
+    # Load company info first (faster)
+    try:
+        start_time = time.time()
+        logger.info(f"Starting company info generation for {company_name}")
+        results["company_info"] = generate_company_info(company_name)
+        logger.info(f"Company info completed in {time.time() - start_time:.2f}s")
+    except Exception as e:
+        logger.error(f"Error loading company info: {e}")
+        results["company_info"] = "Error loading company information."
     
-    def load_news():
-        try:
-            start_time = time.time()
-            logger.info(f"Starting news generation for {company_name}")
-            results["news"] = generate_news_articles(company_name)
-            logger.info(f"News generation completed in {time.time() - start_time:.2f}s")
-        except Exception as e:
-            logger.error(f"Error loading news: {e}")
-            results["news"] = "Error loading news articles."
-    
-    # Use ThreadPoolExecutor for parallel execution
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        company_future = executor.submit(load_company_info)
-        news_future = executor.submit(load_news)
-        
-        # Wait for both to complete
-        concurrent.futures.wait([company_future, news_future], timeout=30)
+    # Load news second (can be slower)
+    try:
+        start_time = time.time()
+        logger.info(f"Starting news generation for {company_name}")
+        results["news"] = generate_news_articles(company_name)
+        logger.info(f"News generation completed in {time.time() - start_time:.2f}s")
+    except Exception as e:
+        logger.error(f"Error loading news: {e}")
+        results["news"] = "Error loading news articles."
     
     return results
 
@@ -964,24 +954,33 @@ def details_page():
             loading_msg = st.empty()
             loading_msg.info("🚀 Loading recent news...")
         
-        # Load content in parallel if not cached
+        # Load content progressively if not cached
         try:
             start_time = time.time()
-            results = load_content_parallel(investor_row['Investors'])
+            
+            # Load company info first (if not cached)
+            if not company_cached:
+                loading_msg.info("🚀 Loading AI insights...")
+                company_info_result = generate_company_info(investor_row['Investors'])
+                if company_info_result:
+                    st.session_state.ai_cache[company_cache_key] = company_info_result
+                    loading_msg.info("✅ AI insights loaded! Loading news...")
+            
+            # Load news second (if not cached)
+            if not news_cached:
+                if company_cached:
+                    loading_msg.info("🚀 Loading recent news...")
+                news_result = generate_news_articles(investor_row['Investors'])
+                if news_result:
+                    st.session_state.ai_cache[news_cache_key] = news_result
+            
             load_time = time.time() - start_time
-            
-            # Cache results
-            if results["company_info"] and not company_cached:
-                st.session_state.ai_cache[company_cache_key] = results["company_info"]
-            if results["news"] and not news_cached:
-                st.session_state.ai_cache[news_cache_key] = results["news"]
-            
-            loading_msg.success(f"✅ Content loaded in {load_time:.1f}s")
+            loading_msg.success(f"✅ All content loaded in {load_time:.1f}s")
             time.sleep(0.5)  # Brief pause to show success
             loading_msg.empty()
         except Exception as e:
             loading_msg.error(f"❌ Error loading content: {str(e)}")
-            logger.error(f"Parallel loading error: {e}")
+            logger.error(f"Content loading error: {e}")
     
     # Display company information
     company_info = st.session_state.ai_cache.get(company_cache_key, "Information not available.")
