@@ -389,26 +389,32 @@ def add_wikipedia_style_citations(response):
 
 def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini API with Google Search grounding and caching"""
+    # Initialize processing_key early to avoid scoping issues
+    processing_key = f"{cache_key}_processing" if cache_key else None
+    
+    logger.info(f"🔍 Starting API call for cache_key: {cache_key}")
+    
     if cache_key and cache_key in st.session_state.ai_cache:
-        logger.info(f"Cache hit for key: {cache_key}")
+        logger.info(f"📋 Cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
     
     # Check if we're already processing this cache key to prevent duplicates
-    processing_key = f"{cache_key}_processing"
-    if cache_key and processing_key in st.session_state:
-        logger.info(f"Request already in progress for: {cache_key}")
+    if processing_key and processing_key in st.session_state:
+        logger.info(f"⏳ Request already in progress for: {cache_key}")
         return "Loading..."
     
     if 'gemini_client' not in st.session_state:
-        logger.error("Gemini client not initialized")
+        logger.error("❌ Gemini client not initialized")
         st.error("Gemini client not initialized")
         return None
-    
+
     try:
         # Mark as processing to prevent duplicates
-        if cache_key:
+        if processing_key:
             st.session_state[processing_key] = True
-        logger.info(f"Making Gemini API call with cache_key: {cache_key}")
+            logger.info(f"🔒 Marked {processing_key} as processing")
+        
+        logger.info(f"🚀 Making Gemini API call with cache_key: {cache_key}")
         
         # Define the grounding tool
         grounding_tool = types.Tool(
@@ -431,7 +437,7 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
         
         if response and response.text:
             result = response.text.strip()
-            logger.info(f"Raw response length: {len(result)}")
+            logger.info(f"✅ Raw response received, length: {len(result)} characters")
             
             # Fix monetary formatting issues by adding spaces around numbers and units
             # Handle specific patterns like "1-50million" -> "1-50 million"
@@ -453,28 +459,34 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
-                logger.info(f"Cached response for key: {cache_key}")
+                logger.info(f"💾 Cached response for key: {cache_key}")
                 # Clear processing flag
-                if processing_key in st.session_state:
+                if processing_key and processing_key in st.session_state:
                     del st.session_state[processing_key]
+                    logger.info(f"🔓 Cleared processing flag for {processing_key}")
             return text_with_citations
         else:
-            logger.warning("Empty response from Gemini")
+            logger.warning("⚠️ Empty response from Gemini")
             # Clear processing flag
-            if cache_key and processing_key in st.session_state:
+            if processing_key and processing_key in st.session_state:
                 del st.session_state[processing_key]
+                logger.info(f"🔓 Cleared processing flag after empty response")
             return "No response generated."
             
     except Exception as e:
-        logger.error(f"Error getting AI response: {str(e)}")
+        logger.error(f"❌ Error getting AI response: {str(e)}")
+        logger.exception("Full traceback:")  # This will log the full stack trace
         # Clear processing flag on error
-        if cache_key and processing_key in st.session_state:
+        if processing_key and processing_key in st.session_state:
             del st.session_state[processing_key]
+            logger.info(f"🔓 Cleared processing flag after error")
         st.error(f"Error getting AI response: {str(e)}")
         return None
 
 def generate_company_info(company_name: str) -> str:
     """Generate comprehensive AI content about the company with strict no-hallucination guidelines"""
+    logger.info(f"🎯 Generating company info prompt for: {company_name}")
+    
     prompt = f"""You are an AI research assistant providing factual, verifiable information about investment companies.
 
 **CRITICAL REQUIREMENTS - NO HALLUCINATION ALLOWED:**
@@ -565,31 +577,38 @@ def get_link_preview(url: str) -> Dict[str, str]:
 
 def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini 2.5 Pro with thinking enabled for news generation"""
+    # Initialize processing_key early to avoid scoping issues
+    processing_key = f"{cache_key}_news_processing" if cache_key else None
+    
+    logger.info(f"🔍 Starting news generation for cache_key: {cache_key}")
+    
     if cache_key and cache_key in st.session_state.ai_cache:
-        logger.info(f"News cache hit for key: {cache_key}")
+        logger.info(f"📋 News cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
     
-            # Check if we're already processing this cache key to prevent duplicates
-        processing_key = f"{cache_key}_news_processing"
-        if processing_key in st.session_state:
-            logger.info(f"News request already in progress for: {cache_key}")
-            return "Loading news..."
-        
-        # Simple rate limiting - don't allow more than 3 concurrent news requests
-        active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing')]
-        if len(active_news_requests) >= 3:
-            logger.info(f"Rate limit hit - {len(active_news_requests)} active news requests")
-            return "Please wait, processing other news requests..."
+    # Check if we're already processing this cache key to prevent duplicates
+    if processing_key and processing_key in st.session_state:
+        logger.info(f"⏳ News request already in progress for: {cache_key}")
+        return "Loading news..."
+    
+    # Simple rate limiting - don't allow more than 3 concurrent news requests
+    active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing')]
+    if len(active_news_requests) >= 3:
+        logger.info(f"🚦 Rate limit hit - {len(active_news_requests)} active news requests")
+        return "Please wait, processing other news requests..."
     
     if 'gemini_client' not in st.session_state:
-        logger.error("Gemini client not initialized for news")
+        logger.error("❌ Gemini client not initialized for news")
         st.error("Gemini client not initialized")
         return None
     
     try:
         # Mark as processing to prevent duplicates
-        st.session_state[processing_key] = True
-        logger.info(f"Making Gemini Pro API call for news with cache_key: {cache_key}")
+        if processing_key:
+            st.session_state[processing_key] = True
+            logger.info(f"🔒 Marked {processing_key} as processing")
+        
+        logger.info(f"🚀 Making Gemini Pro API call for news with cache_key: {cache_key}")
         
         # Define the grounding tool
         grounding_tool = types.Tool(
@@ -611,37 +630,43 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         )
         
         if response and response.text:
-            logger.info(f"News response received, length: {len(response.text)}")
+            logger.info(f"✅ News response received, length: {len(response.text)} characters")
             # Add clean citations without brackets in content
             text_with_citations = add_wikipedia_style_citations(response)
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
-                logger.info(f"Cached news response for key: {cache_key}")
+                logger.info(f"💾 Cached news response for key: {cache_key}")
             
             # Clear processing flag
-            if processing_key in st.session_state:
+            if processing_key and processing_key in st.session_state:
                 del st.session_state[processing_key]
+                logger.info(f"🔓 Cleared processing flag for {processing_key}")
             
             return text_with_citations
         else:
-            logger.warning("Empty news response from Gemini Pro")
+            logger.warning("⚠️ Empty news response from Gemini Pro")
             # Clear processing flag
-            if processing_key in st.session_state:
+            if processing_key and processing_key in st.session_state:
                 del st.session_state[processing_key]
+                logger.info(f"🔓 Cleared processing flag after empty response")
             return "No response generated."
             
     except Exception as e:
-        logger.error(f"Error getting news response: {str(e)}")
+        logger.error(f"❌ Error getting news response: {str(e)}")
+        logger.exception("Full traceback:")  # This will log the full stack trace
         # Clear processing flag on error
-        if processing_key in st.session_state:
+        if processing_key and processing_key in st.session_state:
             del st.session_state[processing_key]
+            logger.info(f"🔓 Cleared processing flag after error")
         st.error(f"Error getting news response: {str(e)}")
         return None
 
 
 
 def generate_news_articles(company_name: str) -> str:
-    """Generate news articles using Gemini 2.5 Flash Lite for speed"""
+    """Generate news articles using Gemini 2.5 Pro with thinking for verification"""
+    logger.info(f"📰 Generating news prompt for: {company_name}")
+    
     prompt = f"""Find REAL, VERIFIABLE news articles about "{company_name}" from the last 6 months.
 
 **CRITICAL REQUIREMENT: NO HALLUCINATION**
@@ -962,20 +987,29 @@ def details_page():
     news_cache_key = f"{investor_row['Investors']}_news"
     
     # Load and display AI company insights immediately
+    company_name = investor_row['Investors']
+    logger.info(f"🏢 Starting company info load for: {company_name}")
+    
     company_info = st.session_state.ai_cache.get(company_cache_key)
     if not company_info:
         # Show loading message for company info
         company_loading = st.empty()
         company_loading.info("🚀 Loading AI insights...")
+        logger.info(f"💭 Company info not cached, generating for: {company_name}")
         
         try:
-            company_info = generate_company_info(investor_row['Investors'])
+            company_info = generate_company_info(company_name)
             if company_info:
                 st.session_state.ai_cache[company_cache_key] = company_info
                 company_loading.empty()
+                logger.info(f"✅ Company info loaded and cached for: {company_name}")
         except Exception as e:
+            logger.error(f"❌ Error loading company info for {company_name}: {str(e)}")
+            logger.exception("Company info loading error traceback:")
             company_loading.error(f"❌ Error loading AI insights: {str(e)}")
             company_info = "Error loading company information."
+    else:
+        logger.info(f"📋 Company info cache hit for: {company_name}")
     
     # Display company information immediately when available
     if company_info:
@@ -986,20 +1020,28 @@ def details_page():
     st.markdown("## 📰 Recent News")
     
     # Load news separately (doesn't block company info display)
+    logger.info(f"📰 Starting news load for: {company_name}")
+    
     news_content = st.session_state.ai_cache.get(news_cache_key)
     if not news_content:
         # Show loading message for news
         news_loading = st.empty()
         news_loading.info("🚀 Loading recent news...")
+        logger.info(f"📡 News not cached, generating for: {company_name}")
         
         try:
-            news_content = generate_news_articles(investor_row['Investors'])
+            news_content = generate_news_articles(company_name)
             if news_content:
                 st.session_state.ai_cache[news_cache_key] = news_content
                 news_loading.empty()
+                logger.info(f"✅ News loaded and cached for: {company_name}")
         except Exception as e:
+            logger.error(f"❌ Error loading news for {company_name}: {str(e)}")
+            logger.exception("News loading error traceback:")
             news_loading.error(f"❌ Error loading news: {str(e)}")
             news_content = "Error loading news articles."
+    else:
+        logger.info(f"📋 News cache hit for: {company_name}")
     
     # Display news content
     if news_content and news_content != "No recent verified news articles found.":
