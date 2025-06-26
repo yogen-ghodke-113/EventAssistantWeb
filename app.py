@@ -328,6 +328,58 @@ def fuzzy_search_investors(query: str, df: pd.DataFrame, limit: int = 10) -> Lis
     
     return unique_matches[:limit]
 
+def fix_monetary_formatting(text: str) -> str:
+    """Comprehensive fix for monetary formatting issues in AI responses"""
+    if not text:
+        return text
+        
+    original_text = text
+    
+    # Step 1: Fix range patterns like "50millionand150" -> "50 million and 150"
+    text = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', text)
+    
+    # Step 2: Fix standalone monetary units "50million" -> "50 million"
+    text = re.sub(r'(\d+)(million|billion|Million|Billion)(?![a-z])', r'\1 \2', text)
+    
+    # Step 3: Fix range patterns "1-50million" -> "1-50 million"
+    text = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', text)
+    
+    # Step 4: Fix weird line break patterns in monetary amounts
+    # Handle cases where "million" gets split across lines
+    text = re.sub(r'(\d+)\s*\n\s*m\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 million', text)
+    text = re.sub(r'(\d+)\s*\n\s*b\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 billion', text)
+    
+    # Step 5: Fix compound words like "millionand" -> "million and"
+    text = re.sub(r'(million|billion)(and)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(and)(million|billion)', r'\1 \2', text, flags=re.IGNORECASE)
+    
+    # Step 6: Fix general compound words
+    text = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(between)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(sometimes)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(focusing)([A-Z][a-z])', r'\1 \2', text)
+    text = re.sub(r'(investment)([A-Z][a-z])', r'\1 \2', text)
+    
+    # Step 7: Fix dollar amounts
+    text = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', text)
+    
+    # Step 8: General fix for number followed by capital letter
+    text = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', text)
+    
+    # Step 9: Clean up multiple spaces
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Log the changes if any were made
+    if original_text != text:
+        logger.info(f"MONETARY FORMATTING CHANGES APPLIED:")
+        logger.info(f"BEFORE: {repr(original_text[:200])}...")
+        logger.info(f"AFTER:  {repr(text[:200])}...")
+    
+    return text
+
 def add_wikipedia_style_citations(response):
     """Add clean Wikipedia-style citations without affecting the main text"""
     if not response or not hasattr(response, 'text'):
@@ -413,9 +465,9 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             system_instruction="Provide direct, concise responses without internal reasoning steps."
         )
 
-        # Make the request with ultra-fast model
+        # Make the request with 2.5 Flash (no thinking for speed)
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-flash-lite-preview-06-17",  # Use fastest model for company info
+            model="gemini-2.5-flash",
             contents=prompt,
             config=config,
         )
@@ -423,21 +475,56 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
         if response and response.text:
             result = response.text.strip()
             logger.info(f"Raw response length: {len(result)}")
+            logger.info(f"RAW AI RESPONSE BEFORE PROCESSING:\n{repr(result)}")
             
-            # Fix monetary formatting issues by adding spaces around numbers and units
-            # Handle specific patterns like "1-50million" -> "1-50 million"
+            # COMPREHENSIVE MONETARY FORMATTING FIX
+            original_result = result
+            
+            # Step 1: Fix range patterns like "50millionand150" -> "50 million and 150"
+            result = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', result)
+            
+            # Step 2: Fix patterns like "25millionand200" -> "25 million and 200"
+            result = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', result)
+            
+            # Step 3: Fix standalone monetary units "50million" -> "50 million"
+            result = re.sub(r'(\d+)(million|billion|Million|Billion)(?![a-z])', r'\1 \2', result)
+            
+            # Step 4: Fix range patterns "1-50million" -> "1-50 million"
             result = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', result)
-            # Handle standalone numbers with monetary units
-            result = re.sub(r'(\d+)(million|billion|Million|Billion)', r'\1 \2', result)
-            # Fix dollar amounts
-            result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
-            # Fix compound words like "andenterprise" -> "and enterprise"
+            
+            # Step 5: Fix weird line break patterns in monetary amounts
+            # Handle cases where "million" gets split across lines
+            result = re.sub(r'(\d+)\s*\n\s*m\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 million', result)
+            result = re.sub(r'(\d+)\s*\n\s*b\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 billion', result)
+            
+            # Step 6: Fix compound words like "millionand" -> "million and"
+            result = re.sub(r'(million|billion)(and)', r'\1 \2', result, flags=re.IGNORECASE)
+            result = re.sub(r'(and)(million|billion)', r'\1 \2', result, flags=re.IGNORECASE)
+            
+            # Step 7: Fix general compound words
             result = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', result)
             result = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', result)
             result = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', result)
             result = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', result)
-            # General fix for number followed by capital letter
+            result = re.sub(r'(between)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(sometimes)([A-Z][a-z])', r'\1 \2', result)
+            
+            # Step 8: Fix dollar amounts
+            result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
+            
+            # Step 9: General fix for number followed by capital letter
             result = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', result)
+            
+            # Step 10: Clean up multiple spaces
+            result = re.sub(r'\s+', ' ', result)
+            
+            # Log all the changes
+            if original_result != result:
+                logger.info(f"MONETARY FORMATTING APPLIED:")
+                logger.info(f"BEFORE: {repr(original_result)}")
+                logger.info(f"AFTER:  {repr(result)}")
+            else:
+                logger.info("No monetary formatting changes needed")
             
             # Add Wikipedia-style citations to the response
             text_with_citations = add_wikipedia_style_citations(response)
@@ -445,6 +532,8 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
                 logger.info(f"Cached response for key: {cache_key}")
+            
+            logger.info(f"FINAL RESPONSE WITH CITATIONS:\n{repr(text_with_citations)}")
             return text_with_citations
         else:
             logger.warning("Empty response from Gemini")
@@ -568,20 +657,54 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         config = types.GenerateContentConfig(
             tools=[grounding_tool],
             response_modalities=["TEXT"],
-            # Enable thinking for better news verification (no system instruction)
+            # Enable thinking for better news verification (no system instruction to allow thinking)
         )
 
-        # Make the request with 2.5 Flash Lite for faster news generation
+        # Make the request with 2.5 Pro model with thinking enabled for better news verification
         response = st.session_state.gemini_client.models.generate_content(
-            model="gemini-2.5-flash-lite-preview-06-17",  # Use ultra-fast model for news
+            model="gemini-2.5-pro",  # Use Pro model with thinking for news
             contents=prompt,
             config=config,
         )
         
         if response and response.text:
-            logger.info(f"News response received, length: {len(response.text)}")
+            result = response.text.strip()
+            logger.info(f"News response received, length: {len(result)}")
+            logger.info(f"RAW NEWS RESPONSE BEFORE PROCESSING:\n{repr(result)}")
+            
+            # Apply the same monetary formatting fixes to news
+            original_result = result
+            
+            # Fix all the same monetary formatting issues
+            result = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', result)
+            result = re.sub(r'(\d+)(million|billion|Million|Billion)(?![a-z])', r'\1 \2', result)
+            result = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', result)
+            result = re.sub(r'(\d+)\s*\n\s*m\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 million', result)
+            result = re.sub(r'(\d+)\s*\n\s*b\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 billion', result)
+            result = re.sub(r'(million|billion)(and)', r'\1 \2', result, flags=re.IGNORECASE)
+            result = re.sub(r'(and)(million|billion)', r'\1 \2', result, flags=re.IGNORECASE)
+            result = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(between)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(sometimes)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
+            result = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', result)
+            result = re.sub(r'\s+', ' ', result)
+            
+            # Log changes for news too
+            if original_result != result:
+                logger.info(f"NEWS MONETARY FORMATTING APPLIED:")
+                logger.info(f"BEFORE: {repr(original_result)}")
+                logger.info(f"AFTER:  {repr(result)}")
+            else:
+                logger.info("No news monetary formatting changes needed")
+            
             # Add clean citations without brackets in content
             text_with_citations = add_wikipedia_style_citations(response)
+            logger.info(f"FINAL NEWS RESPONSE WITH CITATIONS:\n{repr(text_with_citations)}")
+            
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
                 logger.info(f"Cached news response for key: {cache_key}")
@@ -595,31 +718,7 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         st.error(f"Error getting news response: {str(e)}")
         return None
 
-def load_content_progressive(company_name: str) -> Dict[str, str]:
-    """Load content with progressive updates - Streamlit-safe approach"""
-    results = {"company_info": None, "news": None}
-    
-    # Load company info first (faster)
-    try:
-        start_time = time.time()
-        logger.info(f"Starting company info generation for {company_name}")
-        results["company_info"] = generate_company_info(company_name)
-        logger.info(f"Company info completed in {time.time() - start_time:.2f}s")
-    except Exception as e:
-        logger.error(f"Error loading company info: {e}")
-        results["company_info"] = "Error loading company information."
-    
-    # Load news second (can be slower)
-    try:
-        start_time = time.time()
-        logger.info(f"Starting news generation for {company_name}")
-        results["news"] = generate_news_articles(company_name)
-        logger.info(f"News generation completed in {time.time() - start_time:.2f}s")
-    except Exception as e:
-        logger.error(f"Error loading news: {e}")
-        results["news"] = "Error loading news articles."
-    
-    return results
+
 
 def generate_news_articles(company_name: str) -> str:
     """Generate news articles using Gemini 2.5 Flash Lite for speed"""
@@ -933,66 +1032,52 @@ def details_page():
         description_text = investor_row["Description"]
         st.markdown(f'<div style="background: #e8f5e8; padding: 16px; border-radius: 8px; border-left: 4px solid #4caf50; font-size: 16px; line-height: 1.5;">{description_text}</div>', unsafe_allow_html=True)
     
-    # Parallel loading of AI content and news
+    # Progressive AI Content Loading
     st.markdown("---")
     company_cache_key = f"{investor_row['Investors']}_full_info"
     news_cache_key = f"{investor_row['Investors']}_news"
     
-    # Check if both are cached
-    company_cached = company_cache_key in st.session_state.ai_cache
-    news_cached = news_cache_key in st.session_state.ai_cache
-    
-    if not company_cached or not news_cached:
-        # Show loading message
-        if not company_cached and not news_cached:
-            loading_msg = st.empty()
-            loading_msg.info("🚀 Loading AI insights and recent news in parallel...")
-        elif not company_cached:
-            loading_msg = st.empty()
-            loading_msg.info("🚀 Loading AI insights...")
-        else:
-            loading_msg = st.empty()
-            loading_msg.info("🚀 Loading recent news...")
+    # Load and display AI company insights immediately
+    company_info = st.session_state.ai_cache.get(company_cache_key)
+    if not company_info:
+        # Show loading message for company info
+        company_loading = st.empty()
+        company_loading.info("🚀 Loading AI insights...")
         
-        # Load content progressively if not cached
         try:
-            start_time = time.time()
-            
-            # Load company info first (if not cached)
-            if not company_cached:
-                loading_msg.info("🚀 Loading AI insights...")
-                company_info_result = generate_company_info(investor_row['Investors'])
-                if company_info_result:
-                    st.session_state.ai_cache[company_cache_key] = company_info_result
-                    loading_msg.info("✅ AI insights loaded! Loading news...")
-            
-            # Load news second (if not cached)
-            if not news_cached:
-                if company_cached:
-                    loading_msg.info("🚀 Loading recent news...")
-                news_result = generate_news_articles(investor_row['Investors'])
-                if news_result:
-                    st.session_state.ai_cache[news_cache_key] = news_result
-            
-            load_time = time.time() - start_time
-            loading_msg.success(f"✅ All content loaded in {load_time:.1f}s")
-            time.sleep(0.5)  # Brief pause to show success
-            loading_msg.empty()
+            company_info = generate_company_info(investor_row['Investors'])
+            if company_info:
+                st.session_state.ai_cache[company_cache_key] = company_info
+                company_loading.empty()
         except Exception as e:
-            loading_msg.error(f"❌ Error loading content: {str(e)}")
-            logger.error(f"Content loading error: {e}")
+            company_loading.error(f"❌ Error loading AI insights: {str(e)}")
+            company_info = "Error loading company information."
     
-    # Display company information
-    company_info = st.session_state.ai_cache.get(company_cache_key, "Information not available.")
+    # Display company information immediately when available
     if company_info:
         st.markdown(company_info)
     
-    # Recent News Section
+    # Recent News Section - Load separately
     st.markdown("---")
     st.markdown("## 📰 Recent News")
     
+    # Load news separately (doesn't block company info display)
+    news_content = st.session_state.ai_cache.get(news_cache_key)
+    if not news_content:
+        # Show loading message for news
+        news_loading = st.empty()
+        news_loading.info("🚀 Loading recent news...")
+        
+        try:
+            news_content = generate_news_articles(investor_row['Investors'])
+            if news_content:
+                st.session_state.ai_cache[news_cache_key] = news_content
+                news_loading.empty()
+        except Exception as e:
+            news_loading.error(f"❌ Error loading news: {str(e)}")
+            news_content = "Error loading news articles."
+    
     # Display news content
-    news_content = st.session_state.ai_cache.get(news_cache_key, "No recent verified news articles found.")
     if news_content and news_content != "No recent verified news articles found.":
         st.markdown(news_content)
     else:
