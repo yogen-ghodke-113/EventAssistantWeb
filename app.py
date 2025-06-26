@@ -328,58 +328,6 @@ def fuzzy_search_investors(query: str, df: pd.DataFrame, limit: int = 10) -> Lis
     
     return unique_matches[:limit]
 
-def fix_monetary_formatting(text: str) -> str:
-    """Comprehensive fix for monetary formatting issues in AI responses"""
-    if not text:
-        return text
-        
-    original_text = text
-    
-    # Step 1: Fix range patterns like "50millionand150" -> "50 million and 150"
-    text = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', text)
-    
-    # Step 2: Fix standalone monetary units "50million" -> "50 million"
-    text = re.sub(r'(\d+)(million|billion|Million|Billion)(?![a-z])', r'\1 \2', text)
-    
-    # Step 3: Fix range patterns "1-50million" -> "1-50 million"
-    text = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', text)
-    
-    # Step 4: Fix weird line break patterns in monetary amounts
-    # Handle cases where "million" gets split across lines
-    text = re.sub(r'(\d+)\s*\n\s*m\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 million', text)
-    text = re.sub(r'(\d+)\s*\n\s*b\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 billion', text)
-    
-    # Step 5: Fix compound words like "millionand" -> "million and"
-    text = re.sub(r'(million|billion)(and)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(and)(million|billion)', r'\1 \2', text, flags=re.IGNORECASE)
-    
-    # Step 6: Fix general compound words
-    text = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(between)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(sometimes)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(focusing)([A-Z][a-z])', r'\1 \2', text)
-    text = re.sub(r'(investment)([A-Z][a-z])', r'\1 \2', text)
-    
-    # Step 7: Fix dollar amounts
-    text = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', text)
-    
-    # Step 8: General fix for number followed by capital letter
-    text = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', text)
-    
-    # Step 9: Clean up multiple spaces
-    text = re.sub(r'\s+', ' ', text)
-    
-    # Log the changes if any were made
-    if original_text != text:
-        logger.info(f"MONETARY FORMATTING CHANGES APPLIED:")
-        logger.info(f"BEFORE: {repr(original_text[:200])}...")
-        logger.info(f"AFTER:  {repr(text[:200])}...")
-    
-    return text
-
 def add_wikipedia_style_citations(response):
     """Add clean Wikipedia-style citations without affecting the main text"""
     if not response or not hasattr(response, 'text'):
@@ -475,56 +423,21 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
         if response and response.text:
             result = response.text.strip()
             logger.info(f"Raw response length: {len(result)}")
-            logger.info(f"RAW AI RESPONSE BEFORE PROCESSING:\n{repr(result)}")
             
-            # COMPREHENSIVE MONETARY FORMATTING FIX
-            original_result = result
-            
-            # Step 1: Fix range patterns like "50millionand150" -> "50 million and 150"
-            result = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', result)
-            
-            # Step 2: Fix patterns like "25millionand200" -> "25 million and 200"
-            result = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', result)
-            
-            # Step 3: Fix standalone monetary units "50million" -> "50 million"
-            result = re.sub(r'(\d+)(million|billion|Million|Billion)(?![a-z])', r'\1 \2', result)
-            
-            # Step 4: Fix range patterns "1-50million" -> "1-50 million"
+            # Fix monetary formatting issues by adding spaces around numbers and units
+            # Handle specific patterns like "1-50million" -> "1-50 million"
             result = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', result)
-            
-            # Step 5: Fix weird line break patterns in monetary amounts
-            # Handle cases where "million" gets split across lines
-            result = re.sub(r'(\d+)\s*\n\s*m\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 million', result)
-            result = re.sub(r'(\d+)\s*\n\s*b\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 billion', result)
-            
-            # Step 6: Fix compound words like "millionand" -> "million and"
-            result = re.sub(r'(million|billion)(and)', r'\1 \2', result, flags=re.IGNORECASE)
-            result = re.sub(r'(and)(million|billion)', r'\1 \2', result, flags=re.IGNORECASE)
-            
-            # Step 7: Fix general compound words
+            # Handle standalone numbers with monetary units
+            result = re.sub(r'(\d+)(million|billion|Million|Billion)', r'\1 \2', result)
+            # Fix dollar amounts
+            result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
+            # Fix compound words like "andenterprise" -> "and enterprise"
             result = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', result)
             result = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', result)
             result = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', result)
             result = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(between)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(sometimes)([A-Z][a-z])', r'\1 \2', result)
-            
-            # Step 8: Fix dollar amounts
-            result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
-            
-            # Step 9: General fix for number followed by capital letter
+            # General fix for number followed by capital letter
             result = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', result)
-            
-            # Step 10: Clean up multiple spaces
-            result = re.sub(r'\s+', ' ', result)
-            
-            # Log all the changes
-            if original_result != result:
-                logger.info(f"MONETARY FORMATTING APPLIED:")
-                logger.info(f"BEFORE: {repr(original_result)}")
-                logger.info(f"AFTER:  {repr(result)}")
-            else:
-                logger.info("No monetary formatting changes needed")
             
             # Add Wikipedia-style citations to the response
             text_with_citations = add_wikipedia_style_citations(response)
@@ -532,8 +445,6 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
                 logger.info(f"Cached response for key: {cache_key}")
-            
-            logger.info(f"FINAL RESPONSE WITH CITATIONS:\n{repr(text_with_citations)}")
             return text_with_citations
         else:
             logger.warning("Empty response from Gemini")
@@ -668,43 +579,9 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         )
         
         if response and response.text:
-            result = response.text.strip()
-            logger.info(f"News response received, length: {len(result)}")
-            logger.info(f"RAW NEWS RESPONSE BEFORE PROCESSING:\n{repr(result)}")
-            
-            # Apply the same monetary formatting fixes to news
-            original_result = result
-            
-            # Fix all the same monetary formatting issues
-            result = re.sub(r'(\d+)(million|billion|Million|Billion)(and)(\d+)', r'\1 \2 \3 \4', result)
-            result = re.sub(r'(\d+)(million|billion|Million|Billion)(?![a-z])', r'\1 \2', result)
-            result = re.sub(r'(\d+)[-–](\d+)(million|billion|Million|Billion)', r'\1-\2 \3', result)
-            result = re.sub(r'(\d+)\s*\n\s*m\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 million', result)
-            result = re.sub(r'(\d+)\s*\n\s*b\s*\n\s*i\s*\n\s*l\s*\n\s*l\s*\n\s*i\s*\n\s*o\s*\n\s*n', r'\1 billion', result)
-            result = re.sub(r'(million|billion)(and)', r'\1 \2', result, flags=re.IGNORECASE)
-            result = re.sub(r'(and)(million|billion)', r'\1 \2', result, flags=re.IGNORECASE)
-            result = re.sub(r'(and)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(to)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(up)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(values)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(between)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(sometimes)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'(\$\d+)([a-zA-Z])', r'\1 \2', result)
-            result = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', result)
-            result = re.sub(r'\s+', ' ', result)
-            
-            # Log changes for news too
-            if original_result != result:
-                logger.info(f"NEWS MONETARY FORMATTING APPLIED:")
-                logger.info(f"BEFORE: {repr(original_result)}")
-                logger.info(f"AFTER:  {repr(result)}")
-            else:
-                logger.info("No news monetary formatting changes needed")
-            
+            logger.info(f"News response received, length: {len(response.text)}")
             # Add clean citations without brackets in content
             text_with_citations = add_wikipedia_style_citations(response)
-            logger.info(f"FINAL NEWS RESPONSE WITH CITATIONS:\n{repr(text_with_citations)}")
-            
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
                 logger.info(f"Cached news response for key: {cache_key}")
