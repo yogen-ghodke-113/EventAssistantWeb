@@ -78,120 +78,77 @@ st.markdown("""
         border-left: 4px solid #ff9800;
     }
     
-    /* Mobile responsiveness - iPhone 15 Pro Max optimized */
-    @media (max-width: 430px) {
-        .main > div {
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
-            padding-top: 1rem;
+    /* Enhanced mobile-first responsive design */
+    @media screen and (max-width: 430px) {
+        /* iPhone 15 Pro Max optimized styling */
+        .main .block-container {
+            padding: 1rem 0.5rem !important;
         }
         
-        .investor-card, .metric-box, .ai-content, .news-item {
-            margin-left: 0;
-            margin-right: 0;
-            padding: 12px;
-            font-size: 14px;
-        }
-        
-        h1 {
-            font-size: 24px !important;
-        }
-        
-        h2 {
-            font-size: 20px !important;
-        }
-        
-        h3 {
-            font-size: 18px !important;
-        }
-        
-        .stSelectbox {
-            font-size: 16px;
-        }
-        
-        .stMetric {
-            padding: 8px !important;
-        }
-        
-        .stInfo {
+        .stSelectbox > div > div {
             font-size: 16px !important;
-            padding: 12px !important;
         }
         
-        .user-message, .assistant-message {
-            font-size: 14px;
-            padding: 10px 12px;
+        .stMarkdown h1 {
+            font-size: 1.5rem !important;
         }
         
-        .stTextInput > div > div > input {
-            font-size: 16px !important;  /* Prevents zoom on iOS */
+        .stMarkdown h2 {
+            font-size: 1.25rem !important;
         }
         
-        .stButton > button {
-            font-size: 14px;
-            padding: 8px 16px;
-        }
-    }
-    
-    @media (max-width: 768px) {
-        .main > div {
-            padding-left: 1rem;
-            padding-right: 1rem;
+        .stMarkdown h3 {
+            font-size: 1.1rem !important;
         }
         
-        .investor-card, .metric-box, .ai-content, .news-item {
-            margin-left: 0;
-            margin-right: 0;
+        /* Better description text size on mobile */
+        .stMarkdown div[style*="font-size: 16px"] {
+            font-size: 18px !important;
+            line-height: 1.6 !important;
         }
     }
     
-    .stSelectbox > div > div {
-        background-color: white;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .stSelectbox > div > div:focus-within {
-        border-color: #1f77b4;
-        box-shadow: 0 2px 8px rgba(31, 119, 180, 0.3);
-    }
-    
-    .stSelectbox > div > div > div {
-        background-color: white !important;
-        color: #333 !important;
-        font-size: 16px;
-        padding: 8px 12px;
-    }
-    
-    .stSelectbox input {
-        background-color: white !important;
-        color: #333 !important;
-        border: none !important;
-        font-size: 16px !important;
-    }
-    
-    .stSelectbox [data-testid="stSelectbox"] {
-        background-color: white;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-    }
-    
-    .stSelectbox [data-baseweb="select"] {
-        direction: ltr !important;
-    }
-    
+    /* Fix dropdown scrolling on mobile */
     .stSelectbox [data-baseweb="popover"] {
-        transform: translateY(10px) !important;
-        z-index: 999999 !important;
-    }
-    
-    .stSelectbox [role="listbox"] {
-        max-height: 200px !important;
+        position: fixed !important;
+        z-index: 9999 !important;
+        max-height: 50vh !important;
         overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-y !important;
     }
     
-    /* Force dropdown to appear below */
+    .stSelectbox [data-baseweb="popover"] > div {
+        max-height: 50vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-y !important;
+    }
+    
+    .stSelectbox [data-baseweb="menu"] {
+        max-height: 45vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-y !important;
+    }
+    
+    /* Prevent page scroll when dropdown is open on mobile */
+    @media screen and (max-width: 768px) {
+        .stSelectbox [data-baseweb="popover"] {
+            position: fixed !important;
+            left: 5% !important;
+            right: 5% !important;
+            max-width: 90vw !important;
+            max-height: 60vh !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            touch-action: pan-y !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3) !important;
+            border-radius: 8px !important;
+        }
+    }
+    
+    /* Ensure dropdown appears correctly */
     .stSelectbox > div > div > div {
         flex-direction: column !important;
     }
@@ -591,8 +548,8 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         logger.info(f"⏳ News request already in progress for: {cache_key}")
         return "Loading news..."
     
-            # Simple rate limiting - don't allow more than 3 concurrent news requests
-        active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing') or (k.endswith('_processing') and '_news_' in k)]
+    # Simple rate limiting - don't allow more than 3 concurrent news requests
+    active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing') or (k.endswith('_processing') and '_news_' in k)]
     if len(active_news_requests) >= 3:
         logger.info(f"🚦 Rate limit hit - {len(active_news_requests)} active news requests")
         return "Please wait, processing other news requests..."
