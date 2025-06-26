@@ -856,7 +856,19 @@ def search_page():
             with col1:
                 st.markdown(f"**{investor_row['Investors']}**")
                 st.markdown(f"*{investor_row.get('Primary Investor Type', 'N/A')} | {investor_row.get('HQ Location', 'N/A')}*")
-                st.markdown(f"AUM: {investor_row.get('AUM', 'N/A')}")
+                
+                # Convert AUM from millions to billions for consistency
+                aum_raw = investor_row.get('AUM', '')
+                if aum_raw and pd.notna(aum_raw) and str(aum_raw).replace('.', '').replace('-', '').isdigit():
+                    try:
+                        aum_billions = float(aum_raw) / 1000
+                        aum_display = f"${aum_billions:.1f}B"
+                    except (ValueError, TypeError):
+                        aum_display = str(aum_raw) if aum_raw else 'N/A'
+                else:
+                    aum_display = str(aum_raw) if aum_raw else 'N/A'
+                
+                st.markdown(f"AUM: {aum_display}")
             
             with col2:
                 if st.button("View Details", key=f"btn_{investor_row['Investors']}", type="primary"):
@@ -909,26 +921,37 @@ def details_page():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        aum_value = investor_row.get('AUM', '')
-        aum_display = f"{aum_value:,}" if aum_value and str(aum_value).replace('.', '').isdigit() else (aum_value if aum_value else 'N/A')
-        st.markdown(f'<div style="background: #e8f5e8; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #2e7d32;">AUM</h4><h3 style="margin: 0; color: #1b5e20;">{aum_display}</h3></div>', unsafe_allow_html=True)
+        # Convert AUM from millions to billions
+        aum_raw = investor_row.get('AUM', '')
+        if aum_raw and pd.notna(aum_raw) and str(aum_raw).replace('.', '').replace('-', '').isdigit():
+            try:
+                aum_billions = float(aum_raw) / 1000
+                aum_display = f"${aum_billions:.1f}B"
+            except (ValueError, TypeError):
+                aum_display = str(aum_raw) if aum_raw else 'N/A'
+        else:
+            aum_display = str(aum_raw) if aum_raw else 'N/A'
         
-        investments = investor_row.get('Investments', 'N/A')
-        st.markdown(f'<div style="background: #e3f2fd; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #1565c0;">Total Investments</h4><h3 style="margin: 0; color: #0d47a1;">{investments}</h3></div>', unsafe_allow_html=True)
-    
-    with col2:
+        st.markdown(f'<div style="background: #e8f5e8; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #2e7d32;">AUM (Billions)</h4><h3 style="margin: 0; color: #1b5e20;">{aum_display}</h3></div>', unsafe_allow_html=True)
+        
         pe_category = investor_row.get('PE Category', 'N/A')
         st.markdown(f'<div style="background: #fff3e0; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #ef6c00;">PE Category</h4><h3 style="margin: 0; color: #bf360c;">{pe_category}</h3></div>', unsafe_allow_html=True)
-        
+    
+    with col2:
         active_portfolio = investor_row.get('Active Portfolio', 'N/A')
         st.markdown(f'<div style="background: #f3e5f5; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #7b1fa2;">Active Portfolio</h4><h3 style="margin: 0; color: #4a148c;">{active_portfolio}</h3></div>', unsafe_allow_html=True)
-    
-    with col3:
+        
         exits = investor_row.get('Exits', 'N/A')
         st.markdown(f'<div style="background: #fce4ec; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #c2185b;">Exits</h4><h3 style="margin: 0; color: #880e4f;">{exits}</h3></div>', unsafe_allow_html=True)
-        
+    
+    with col3:
         last_12_months = investor_row.get('Investments in the last 12 months', 'N/A')
         st.markdown(f'<div style="background: #e0f2f1; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #00695c;">Last 12 Months</h4><h3 style="margin: 0; color: #004d40;">{last_12_months}</h3></div>', unsafe_allow_html=True)
+        
+        # Add dry powder if available
+        dry_powder = investor_row.get('Dry Powder', '')
+        if dry_powder and pd.notna(dry_powder) and str(dry_powder) not in ['N/A', '', 'nan']:
+            st.markdown(f'<div style="background: #e8eaf6; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #3f51b5;">Dry Powder</h4><h3 style="margin: 0; color: #283593;">{dry_powder}</h3></div>', unsafe_allow_html=True)
     
 
     
