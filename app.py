@@ -578,7 +578,7 @@ def get_link_preview(url: str) -> Dict[str, str]:
 def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str]:
     """Get response from Gemini 2.5 Pro with thinking enabled for news generation"""
     # Initialize processing_key early to avoid scoping issues
-    processing_key = f"{cache_key}_news_processing" if cache_key else None
+    processing_key = f"{cache_key}_processing" if cache_key else None
     
     logger.info(f"🔍 Starting news generation for cache_key: {cache_key}")
     
@@ -591,8 +591,8 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         logger.info(f"⏳ News request already in progress for: {cache_key}")
         return "Loading news..."
     
-    # Simple rate limiting - don't allow more than 3 concurrent news requests
-    active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing')]
+            # Simple rate limiting - don't allow more than 3 concurrent news requests
+        active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing') or (k.endswith('_processing') and '_news_' in k)]
     if len(active_news_requests) >= 3:
         logger.info(f"🚦 Rate limit hit - {len(active_news_requests)} active news requests")
         return "Please wait, processing other news requests..."
