@@ -393,12 +393,21 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
         logger.info(f"Cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
     
+    # Check if we're already processing this cache key to prevent duplicates
+    processing_key = f"{cache_key}_processing"
+    if cache_key and processing_key in st.session_state:
+        logger.info(f"Request already in progress for: {cache_key}")
+        return "Loading..."
+    
     if 'gemini_client' not in st.session_state:
         logger.error("Gemini client not initialized")
         st.error("Gemini client not initialized")
         return None
     
     try:
+        # Mark as processing to prevent duplicates
+        if cache_key:
+            st.session_state[processing_key] = True
         logger.info(f"Making Gemini API call with cache_key: {cache_key}")
         
         # Define the grounding tool
@@ -445,13 +454,22 @@ def get_gemini_response(prompt: str, cache_key: str = None) -> Optional[str]:
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
                 logger.info(f"Cached response for key: {cache_key}")
+                # Clear processing flag
+                if processing_key in st.session_state:
+                    del st.session_state[processing_key]
             return text_with_citations
         else:
             logger.warning("Empty response from Gemini")
+            # Clear processing flag
+            if cache_key and processing_key in st.session_state:
+                del st.session_state[processing_key]
             return "No response generated."
             
     except Exception as e:
         logger.error(f"Error getting AI response: {str(e)}")
+        # Clear processing flag on error
+        if cache_key and processing_key in st.session_state:
+            del st.session_state[processing_key]
         st.error(f"Error getting AI response: {str(e)}")
         return None
 
@@ -551,12 +569,26 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
         logger.info(f"News cache hit for key: {cache_key}")
         return st.session_state.ai_cache[cache_key]
     
+            # Check if we're already processing this cache key to prevent duplicates
+        processing_key = f"{cache_key}_news_processing"
+        if processing_key in st.session_state:
+            logger.info(f"News request already in progress for: {cache_key}")
+            return "Loading news..."
+        
+        # Simple rate limiting - don't allow more than 3 concurrent news requests
+        active_news_requests = [k for k in st.session_state.keys() if k.endswith('_news_processing')]
+        if len(active_news_requests) >= 3:
+            logger.info(f"Rate limit hit - {len(active_news_requests)} active news requests")
+            return "Please wait, processing other news requests..."
+    
     if 'gemini_client' not in st.session_state:
         logger.error("Gemini client not initialized for news")
         st.error("Gemini client not initialized")
         return None
     
     try:
+        # Mark as processing to prevent duplicates
+        st.session_state[processing_key] = True
         logger.info(f"Making Gemini Pro API call for news with cache_key: {cache_key}")
         
         # Define the grounding tool
@@ -585,13 +617,24 @@ def get_gemini_news_response(prompt: str, cache_key: str = None) -> Optional[str
             if cache_key:
                 st.session_state.ai_cache[cache_key] = text_with_citations
                 logger.info(f"Cached news response for key: {cache_key}")
+            
+            # Clear processing flag
+            if processing_key in st.session_state:
+                del st.session_state[processing_key]
+            
             return text_with_citations
         else:
             logger.warning("Empty news response from Gemini Pro")
+            # Clear processing flag
+            if processing_key in st.session_state:
+                del st.session_state[processing_key]
             return "No response generated."
             
     except Exception as e:
         logger.error(f"Error getting news response: {str(e)}")
+        # Clear processing flag on error
+        if processing_key in st.session_state:
+            del st.session_state[processing_key]
         st.error(f"Error getting news response: {str(e)}")
         return None
 
@@ -734,7 +777,11 @@ def generate_chatbot_response(company_name: str, question: str, chat_history: Li
 
 Answer the question naturally, as if you're an expert who has been studying this company and can provide specific insights based on their actual metrics and data:"""
     
-    cache_key = f"chat_{company_name}_{hash(question + str(len(chat_history)))}"
+    # Create more unique cache key to prevent conflicts
+    import hashlib
+    import time
+    unique_str = f"{company_name}_{question}_{len(chat_history)}_{str(time.time())[:10]}"
+    cache_key = f"chat_{hashlib.md5(unique_str.encode()).hexdigest()[:8]}"
     response = get_gemini_response(prompt, cache_key)
     
     return response or "I apologize, but I'm unable to provide a response at the moment. Please try rephrasing your question."
