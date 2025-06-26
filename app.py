@@ -768,6 +768,12 @@ Answer the question naturally, as if you're an expert who has been studying this
     
     return response or "I apologize, but I'm unable to provide a response at the moment. Please try rephrasing your question."
 
+def format_value(value, default="N/A"):
+    """Format a value, replacing NaN/empty values with N/A"""
+    if value is None or pd.isna(value) or str(value).lower() in ['nan', '', '#n/a']:
+        return default
+    return str(value)
+
 def get_all_company_names(df: pd.DataFrame) -> List[str]:
     """Get all unique company names from the CSV"""
     if df is None:
@@ -855,7 +861,7 @@ def search_page():
             
             with col1:
                 st.markdown(f"**{investor_row['Investors']}**")
-                st.markdown(f"*{investor_row.get('Primary Investor Type', 'N/A')} | {investor_row.get('HQ Location', 'N/A')}*")
+                st.markdown(f"*{format_value(investor_row.get('Primary Investor Type'))} | {format_value(investor_row.get('HQ Location'))}*")
                 
                 # Convert AUM from millions to billions for consistency
                 aum_raw = investor_row.get('AUM', '')
@@ -864,9 +870,9 @@ def search_page():
                         aum_billions = float(aum_raw) / 1000
                         aum_display = f"${aum_billions:.1f}B"
                     except (ValueError, TypeError):
-                        aum_display = str(aum_raw) if aum_raw else 'N/A'
+                        aum_display = format_value(aum_raw)
                 else:
-                    aum_display = str(aum_raw) if aum_raw else 'N/A'
+                    aum_display = format_value(aum_raw)
                 
                 st.markdown(f"AUM: {aum_display}")
             
@@ -895,8 +901,8 @@ def details_page():
     st.markdown(f"# {investor_row['Investors']}")
     
     # Header information with clean, distinct styling
-    location = investor_row.get("HQ Location", "N/A")
-    country = investor_row.get("HQ Country/Territory/Region", "N/A")
+    location = format_value(investor_row.get("HQ Location"))
+    country = format_value(investor_row.get("HQ Country/Territory/Region"))
     location_display = f"{location}, {country}" if location != "N/A" and country != "N/A" else (location if location != "N/A" else country)
     
     st.markdown(f"""
@@ -904,7 +910,7 @@ def details_page():
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
             <div style="color: white; margin: 5px 0;">
                 <span style="font-size: 14px; opacity: 0.9;">TYPE</span><br>
-                <span style="font-size: 18px; font-weight: bold;">{investor_row.get("Primary Investor Type", "N/A")}</span>
+                <span style="font-size: 18px; font-weight: bold;">{format_value(investor_row.get("Primary Investor Type"))}</span>
             </div>
             <div style="color: white; margin: 5px 0; text-align: right;">
                 <span style="font-size: 14px; opacity: 0.9;">LOCATION</span><br>
@@ -928,30 +934,25 @@ def details_page():
                 aum_billions = float(aum_raw) / 1000
                 aum_display = f"${aum_billions:.1f}B"
             except (ValueError, TypeError):
-                aum_display = str(aum_raw) if aum_raw else 'N/A'
+                aum_display = format_value(aum_raw)
         else:
-            aum_display = str(aum_raw) if aum_raw else 'N/A'
+            aum_display = format_value(aum_raw)
         
         st.markdown(f'<div style="background: #e8f5e8; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #2e7d32;">AUM (Billions)</h4><h3 style="margin: 0; color: #1b5e20;">{aum_display}</h3></div>', unsafe_allow_html=True)
         
-        pe_category = investor_row.get('PE Category', 'N/A')
+        pe_category = format_value(investor_row.get('PE Category'))
         st.markdown(f'<div style="background: #fff3e0; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #ef6c00;">PE Category</h4><h3 style="margin: 0; color: #bf360c;">{pe_category}</h3></div>', unsafe_allow_html=True)
     
     with col2:
-        active_portfolio = investor_row.get('Active Portfolio', 'N/A')
+        active_portfolio = format_value(investor_row.get('Active Portfolio'))
         st.markdown(f'<div style="background: #f3e5f5; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #7b1fa2;">Active Portfolio</h4><h3 style="margin: 0; color: #4a148c;">{active_portfolio}</h3></div>', unsafe_allow_html=True)
         
-        exits = investor_row.get('Exits', 'N/A')
+        exits = format_value(investor_row.get('Exits'))
         st.markdown(f'<div style="background: #fce4ec; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #c2185b;">Exits</h4><h3 style="margin: 0; color: #880e4f;">{exits}</h3></div>', unsafe_allow_html=True)
     
     with col3:
-        last_12_months = investor_row.get('Investments in the last 12 months', 'N/A')
+        last_12_months = format_value(investor_row.get('Investments in the last 12 months'))
         st.markdown(f'<div style="background: #e0f2f1; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #00695c;">Last 12 Months</h4><h3 style="margin: 0; color: #004d40;">{last_12_months}</h3></div>', unsafe_allow_html=True)
-        
-        # Add dry powder if available
-        dry_powder = investor_row.get('Dry Powder', '')
-        if dry_powder and pd.notna(dry_powder) and str(dry_powder) not in ['N/A', '', 'nan']:
-            st.markdown(f'<div style="background: #e8eaf6; padding: 16px; border-radius: 8px; text-align: center; margin: 5px 0;"><h4 style="margin: 0; color: #3f51b5;">Dry Powder</h4><h3 style="margin: 0; color: #283593;">{dry_powder}</h3></div>', unsafe_allow_html=True)
     
 
     
